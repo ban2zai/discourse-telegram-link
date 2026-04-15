@@ -6,8 +6,6 @@
 # authors: ban2zai
 
 after_initialize do
-  require_dependency "telegram_link_controller"
-
   Discourse::Application.routes.prepend do
     get "/link-telegram" => "telegram_link#show"
   end
