@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 class TelegramLinkController < ApplicationController
-  requires_plugin "discourse-telegram-link"
   skip_before_action :check_xhr
 
   def show
