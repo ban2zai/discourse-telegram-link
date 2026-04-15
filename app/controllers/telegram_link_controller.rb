@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 class TelegramLinkController < ApplicationController
+  prepend_view_path File.expand_path("../../views", __FILE__)
   skip_before_action :check_xhr
 
   def show
