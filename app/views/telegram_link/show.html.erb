@@ -1,0 +1,31 @@
+<style>
+  .tg-link-result {
+    max-width: 480px;
+    margin: 60px auto;
+    padding: 32px;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 18px;
+    line-height: 1.5;
+  }
+  .tg-link-result.success {
+    background: #e8f5e9;
+    border: 1px solid #a5d6a7;
+    color: #1b5e20;
+  }
+  .tg-link-result.error {
+    background: #ffebee;
+    border: 1px solid #ef9a9a;
+    color: #b71c1c;
+  }
+</style>
+
+<% if @success %>
+  <div class="tg-link-result success">
+    ✅ Telegram успешно привязан к аккаунту на форуме
+  </div>
+<% else %>
+  <div class="tg-link-result error">
+    ❌ <%= @error_message %>
+  </div>
+<% end %>

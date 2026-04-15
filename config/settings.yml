@@ -1,0 +1,19 @@
+plugins:
+  telegram_link_enabled:
+    default: false
+    type: bool
+    client: false
+
+  telegram_link_hmac_secret:
+    default: ""
+    type: string
+    secret: true
+
+  telegram_link_webhook_url:
+    default: ""
+    type: string
+
+  telegram_link_webhook_token:
+    default: ""
+    type: string
+    secret: true
