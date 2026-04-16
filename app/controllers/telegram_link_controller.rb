@@ -22,7 +22,19 @@ class TelegramLinkController < ApplicationController
       render :show, layout: false, status: :bad_request and return
     end
 
+    unless chat_id.match?(/\A-?\d+\z/)
+      @error_message = "Неверная ссылка: некорректный chat_id"
+      render :show, layout: false, status: :bad_request and return
+    end
+
     secret = SiteSetting.telegram_link_hmac_secret
+
+    if secret.blank?
+      Rails.logger.error("[discourse-telegram-link] HMAC secret is not configured")
+      @error_message = "Плагин не настроен: обратитесь к администратору"
+      render :show, layout: false, status: :service_unavailable and return
+    end
+
     expected_sig = OpenSSL::HMAC.hexdigest("SHA256", secret, chat_id)
 
     unless Rack::Utils.secure_compare(expected_sig, sig)
@@ -39,6 +51,13 @@ class TelegramLinkController < ApplicationController
 
     begin
       uri = URI.parse(SiteSetting.telegram_link_webhook_url)
+
+      unless uri.scheme.in?(%w[http https])
+        Rails.logger.error("[discourse-telegram-link] Invalid webhook URL scheme: #{uri.scheme}")
+        @error_message = "Ошибка конфигурации webhook: обратитесь к администратору"
+        render :show, layout: false, status: :internal_server_error and return
+      end
+
       http = Net::HTTP.new(uri.host, uri.port)
       http.use_ssl = uri.scheme == "https"
       http.open_timeout = 10
@@ -60,6 +79,14 @@ class TelegramLinkController < ApplicationController
       Rails.logger.error("[discourse-telegram-link] Webhook exception: #{e.message}")
       @error_message = "Ошибка соединения с webhook: #{e.message}"
       render :show, layout: false, status: :internal_server_error and return
+    end
+
+    @username = current_user.username
+    @logo_url = begin
+      logo = SiteSetting.logo
+      logo.present? ? logo.url : nil
+    rescue
+      nil
     end
 
     @success = true
