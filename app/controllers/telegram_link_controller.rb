@@ -19,7 +19,7 @@ class TelegramLinkController < ApplicationController
 
     if chat_id.blank? || sig.blank?
       @error_message = "Неверная ссылка: отсутствуют параметры"
-      render :show, status: :bad_request and return
+      render :show, layout: false, status: :bad_request and return
     end
 
     secret = SiteSetting.telegram_link_hmac_secret
@@ -27,7 +27,7 @@ class TelegramLinkController < ApplicationController
 
     unless Rack::Utils.secure_compare(expected_sig, sig)
       @error_message = "Неверная подпись ссылки"
-      render :show, status: :forbidden and return
+      render :show, layout: false, status: :forbidden and return
     end
 
     payload = {
@@ -54,15 +54,15 @@ class TelegramLinkController < ApplicationController
       unless response.code.to_i.between?(200, 299)
         Rails.logger.error("[discourse-telegram-link] Webhook error: #{response.code} #{response.body}")
         @error_message = "Ошибка отправки данных (webhook вернул #{response.code})"
-        render :show, status: :bad_gateway and return
+        render :show, layout: false, status: :bad_gateway and return
       end
     rescue => e
       Rails.logger.error("[discourse-telegram-link] Webhook exception: #{e.message}")
       @error_message = "Ошибка соединения с webhook: #{e.message}"
-      render :show, status: :internal_server_error and return
+      render :show, layout: false, status: :internal_server_error and return
     end
 
     @success = true
-    render :show
+    render :show, layout: false
   end
 end
