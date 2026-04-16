@@ -46,7 +46,8 @@ class TelegramLinkController < ApplicationController
       discourse_user_id: current_user.id,
       discourse_username: current_user.username,
       email: current_user.email,
-      chat_id: chat_id.to_i
+      chat_id: chat_id.to_i,
+      linked_at: Time.now.utc.iso8601
     }
 
     begin
@@ -54,7 +55,7 @@ class TelegramLinkController < ApplicationController
 
       unless uri.scheme.in?(%w[http https])
         Rails.logger.error("[discourse-telegram-link] Invalid webhook URL scheme: #{uri.scheme}")
-        @error_message = "Ошибка конфигурации webhook: обратитесь к администратору"
+        @error_message = "Не удалось завершить привязку. Обратитесь к администратору."
         render :show, layout: false, status: :internal_server_error and return
       end
 
@@ -72,12 +73,12 @@ class TelegramLinkController < ApplicationController
 
       unless response.code.to_i.between?(200, 299)
         Rails.logger.error("[discourse-telegram-link] Webhook error: #{response.code} #{response.body}")
-        @error_message = "Ошибка отправки данных (webhook вернул #{response.code})"
+        @error_message = "Не удалось завершить привязку. Попробуйте позже или обратитесь к администратору."
         render :show, layout: false, status: :bad_gateway and return
       end
     rescue => e
       Rails.logger.error("[discourse-telegram-link] Webhook exception: #{e.message}")
-      @error_message = "Ошибка соединения с webhook: #{e.message}"
+      @error_message = "Не удалось завершить привязку. Попробуйте позже или обратитесь к администратору."
       render :show, layout: false, status: :internal_server_error and return
     end
 
