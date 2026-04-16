@@ -17,3 +17,11 @@ plugins:
     default: ""
     type: string
     secret: true
+
+  telegram_link_success_button_label:
+    default: "Инструкция для уведомлений"
+    type: string
+
+  telegram_link_success_button_url:
+    default: ""
+    type: string

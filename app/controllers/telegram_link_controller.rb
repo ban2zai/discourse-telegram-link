@@ -88,6 +88,8 @@ class TelegramLinkController < ApplicationController
     rescue
       nil
     end
+    @success_button_label = SiteSetting.telegram_link_success_button_label
+    @success_button_url   = SiteSetting.telegram_link_success_button_url
 
     @success = true
     render :show, layout: false

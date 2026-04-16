@@ -92,18 +92,21 @@
     <% end %>
 
     <% if @success %>
-      <div class="card__icon">✅</div>
       <div class="card__title">Telegram привязан</div>
       <div class="card__subtitle">
         Аккаунт <strong>@<%= @username %></strong> успешно привязан к Telegram
       </div>
+      <% if @success_button_url.present? %>
+        <a href="<%= @success_button_url %>" class="btn"><%= @success_button_label %></a>
+      <% else %>
+        <a href="/" class="btn">На главную</a>
+      <% end %>
     <% else %>
       <div class="card__icon">❌</div>
       <div class="card__title">Ошибка</div>
       <div class="card__subtitle"><%= @error_message %></div>
+      <a href="/" class="btn">На главную</a>
     <% end %>
-
-    <a href="/" class="btn">На главную</a>
 
   </div>
 </body>
