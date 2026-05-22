@@ -77,13 +77,21 @@
       opacity: 0.88;
     }
 
+    .confirm-form {
+      margin-top: 0;
+    }
+
+    .confirm-form .btn {
+      border: 0;
+    }
+
     .card--error .card__title {
       color: #c0392b;
     }
   </style>
 </head>
 <body>
-  <div class="card<%= ' card--error' unless @success %>">
+  <div class="card<%= ' card--error' if @success == false %>">
 
     <% if @logo_url.present? %>
       <div class="card__logo">
@@ -91,7 +99,17 @@
       </div>
     <% end %>
 
-    <% if @success %>
+    <% if @confirmation %>
+      <div class="card__title">Привязать Telegram?</div>
+      <div class="card__subtitle">
+        Привязать Telegram к аккаунту <strong>@<%= @username %></strong>?
+      </div>
+      <form action="/link-telegram/confirm" method="post" class="confirm-form">
+        <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
+        <input type="hidden" name="token" value="<%= @token %>">
+        <button type="submit" class="btn">Привязать</button>
+      </form>
+    <% elsif @success %>
       <div class="card__title">Telegram привязан</div>
       <div class="card__subtitle">
         Аккаунт <strong>@<%= @username %></strong> успешно привязан к Telegram

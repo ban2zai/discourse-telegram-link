@@ -4,95 +4,137 @@ class TelegramLinkController < ApplicationController
   prepend_view_path File.expand_path("../../views", __FILE__)
   skip_before_action :check_xhr
 
-  def show
-    unless SiteSetting.telegram_link_enabled
-      raise Discourse::NotFound
-    end
+  GENERIC_FAILURE_MESSAGE = "Не удалось завершить привязку. Попробуйте позже или обратитесь к администратору."
 
-    unless current_user
-      redirect_to "/login?return_path=#{CGI.escape(request.fullpath)}"
+  def show
+    ensure_enabled!
+    redirect_to_login and return unless current_user
+
+    token = token_param
+
+    if token.blank?
+      render_error("Неверная ссылка: отсутствует token", :bad_request)
       return
     end
 
-    chat_id = params[:chat_id].to_s
-    sig     = params[:sig].to_s
+    @confirmation = true
+    @token = token
+    @username = current_user.username
+    @logo_url = logo_url
 
-    if chat_id.blank? || sig.blank?
-      @error_message = "Неверная ссылка: отсутствуют параметры"
-      render :show, layout: false, status: :bad_request and return
+    render :show, layout: false
+  end
+
+  def confirm
+    ensure_enabled!
+    redirect_to_login and return unless current_user
+
+    token = token_param
+
+    if token.blank?
+      render_error("Неверная ссылка: отсутствует token", :bad_request)
+      return
     end
 
-    unless chat_id.match?(/\A-?\d+\z/)
-      @error_message = "Неверная ссылка: некорректный chat_id"
-      render :show, layout: false, status: :bad_request and return
+    begin
+      response = post_account_link(token)
+      status_code = response.code.to_i
+
+      case status_code
+      when 200..299
+        render_success
+      when 409
+        log_webhook_error(status_code, response.body, token)
+        render_error("Этот Telegram или аккаунт форума уже привязан к другой учётной записи.", :conflict)
+      when 410
+        log_webhook_error(status_code, response.body, token)
+        render_error("Ссылка устарела. Откройте /settings в Telegram и попробуйте снова.", :gone)
+      else
+        log_webhook_error(status_code, response.body, token)
+        render_error(GENERIC_FAILURE_MESSAGE, :bad_gateway)
+      end
+    rescue => e
+      Rails.logger.error("[discourse-telegram-link] Webhook exception: #{e.class}: #{e.message}")
+      render_error(GENERIC_FAILURE_MESSAGE, :internal_server_error)
+    end
+  end
+
+  private
+
+  def ensure_enabled!
+    raise Discourse::NotFound unless SiteSetting.telegram_link_enabled
+  end
+
+  def redirect_to_login
+    redirect_to "/login?return_path=#{CGI.escape(request.fullpath)}"
+  end
+
+  def token_param
+    params[:token].to_s.strip
+  end
+
+  def post_account_link(token)
+    uri = URI.parse(SiteSetting.telegram_link_webhook_url)
+
+    unless uri.scheme.in?(%w[http https])
+      raise URI::InvalidURIError, "Invalid webhook URL scheme: #{uri.scheme}"
     end
 
-    secret = SiteSetting.telegram_link_hmac_secret
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl = uri.scheme == "https"
+    http.open_timeout = 10
+    http.read_timeout = 10
 
-    if secret.blank?
-      Rails.logger.error("[discourse-telegram-link] HMAC secret is not configured")
-      @error_message = "Плагин не настроен: обратитесь к администратору"
-      render :show, layout: false, status: :service_unavailable and return
-    end
-
-    expected_sig = OpenSSL::HMAC.hexdigest("SHA256", secret, chat_id)
-
-    unless Rack::Utils.secure_compare(expected_sig, sig)
-      @error_message = "Неверная подпись ссылки"
-      render :show, layout: false, status: :forbidden and return
-    end
-
-    payload = {
+    req = Net::HTTP::Post.new(uri.request_uri)
+    req["Content-Type"] = "application/json"
+    req["Authorization"] = "Bearer #{SiteSetting.telegram_link_webhook_token}"
+    req.body = {
+      token: token,
       discourse_user_id: current_user.id,
       discourse_username: current_user.username,
       email: current_user.email,
-      chat_id: chat_id.to_i,
       linked_at: Time.now.utc.iso8601
-    }
+    }.to_json
 
-    begin
-      uri = URI.parse(SiteSetting.telegram_link_webhook_url)
+    http.request(req)
+  end
 
-      unless uri.scheme.in?(%w[http https])
-        Rails.logger.error("[discourse-telegram-link] Invalid webhook URL scheme: #{uri.scheme}")
-        @error_message = "Не удалось завершить привязку. Обратитесь к администратору."
-        render :show, layout: false, status: :internal_server_error and return
-      end
-
-      http = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl = uri.scheme == "https"
-      http.open_timeout = 10
-      http.read_timeout = 10
-
-      req = Net::HTTP::Post.new(uri.request_uri)
-      req["Content-Type"] = "application/json"
-      req["Authorization"] = "Bearer #{SiteSetting.telegram_link_webhook_token}"
-      req.body = payload.to_json
-
-      response = http.request(req)
-
-      unless response.code.to_i.between?(200, 299)
-        Rails.logger.error("[discourse-telegram-link] Webhook error: #{response.code} #{response.body}")
-        @error_message = "Не удалось завершить привязку. Попробуйте позже или обратитесь к администратору."
-        render :show, layout: false, status: :bad_gateway and return
-      end
-    rescue => e
-      Rails.logger.error("[discourse-telegram-link] Webhook exception: #{e.message}")
-      @error_message = "Не удалось завершить привязку. Попробуйте позже или обратитесь к администратору."
-      render :show, layout: false, status: :internal_server_error and return
-    end
-
+  def render_success
     @username = current_user.username
-    @logo_url = begin
-      logo = SiteSetting.logo
-      logo.present? ? logo.url : nil
-    rescue
-      nil
-    end
+    @logo_url = logo_url
     @success_button_label = SiteSetting.telegram_link_success_button_label
-    @success_button_url   = SiteSetting.telegram_link_success_button_url
+    @success_button_url = SiteSetting.telegram_link_success_button_url
 
+    @confirmation = false
     @success = true
     render :show, layout: false
+  end
+
+  def render_error(message, status)
+    @logo_url = logo_url
+    @confirmation = false
+    @success = false
+    @error_message = message
+    render :show, layout: false, status: status
+  end
+
+  def logo_url
+    logo = SiteSetting.logo
+    logo.present? ? logo.url : nil
+  rescue
+    nil
+  end
+
+  def log_webhook_error(status_code, body, token)
+    Rails.logger.error(
+      "[discourse-telegram-link] Webhook error: status=#{status_code} body=#{safe_body_preview(body, token)}"
+    )
+  end
+
+  def safe_body_preview(body, token)
+    preview = body.to_s[0, 200]
+    preview = preview.gsub(token, "[FILTERED_TOKEN]") if token.present?
+    preview = preview.gsub(current_user.email.to_s, "[FILTERED_EMAIL]") if current_user&.email.present?
+    preview.gsub(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i, "[FILTERED_EMAIL]")
   end
 end
